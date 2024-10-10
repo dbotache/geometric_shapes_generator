@@ -4,7 +4,7 @@ from src.geometric_shapes import GeometricShapes
 
 
 COLOR_LIST = [[0, 254, 0],      # green
-              [132, 194, 234],  # blue
+              # [132, 194, 234],  # blue
               [254, 0, 0],      # red
               # [255, 255, 255] # white
               ]
@@ -23,13 +23,17 @@ def main(args):
     dim_y = args.resolution_y
     shape_size = args.shape_size
     color_list = COLOR_LIST
+    bg_image = args.bg_image
 
-    generator = GeometricShapes(destination=destination,
-                                size=datasize,
-                                dim_x=dim_x,
-                                dim_y=dim_y,
-                                shape_size=shape_size,
-                                color_list=color_list)
+    generator = GeometricShapes(
+        destination=destination,
+        size=datasize,
+        dim_x=dim_x,
+        dim_y=dim_y,
+        shape_size=shape_size,
+        color_list=color_list,
+        bg_image=bg_image
+    )
     generator.generate()
 
 
@@ -41,6 +45,7 @@ if __name__ == '__main__':
     parser.add_argument('--resolution_y',metavar='resolution_y', type=int, default=1350, help='resolution in y-axis')
     parser.add_argument('--shape_size',metavar='shape_size', type=int, default=500, help='Size of gemoetric shapes')
     parser.add_argument('--use_color_list',metavar='use_color_list', type=bool, default=1, help='Flag for using predefined COLOR_LIST')
+    parser.add_argument('--bg_image',metavar='bg_image', type=str, default="", help='Path to background image')
     args = parser.parse_args()
 
     main(args)
