@@ -22,9 +22,11 @@ class DatasetTests(unittest.TestCase):
         (self.root / "nested").mkdir()
         Image.new("RGBA", (32, 32), (255, 255, 255, 255)).save(self.root / "a.png")
         Image.new("L", (32, 32), 0).save(self.root / "nested/b.png")
+        (self.root / "run_example.json").write_text('{"images": ["a.png", "nested/b.png"]}')
 
     def test_rgb_conversion_and_slice_consistency(self):
         dataset = ImageCollection(self.root)
+        self.assertEqual(len(dataset), 2)  # Run metadata is not an image sample.
         image, label = dataset[0]
         batch, labels = dataset[:2]
         self.assertEqual(image.shape, (3, 32, 32))

@@ -15,14 +15,14 @@ class AbstractShape(ABC):
         self.dim_x, self.dim_y = dim_x, dim_y
         self.shape_size, self.alpha = shape_size, alpha
         self.color_list, self.shift = color_list, shift
+        self._palette = None if color_list is None else np.asarray(color_list, dtype=float) / 255
         self.rng = rng if rng is not None else np.random.default_rng()
         self.radius = self.x = self.y = self.random_color = self.rotation = None
 
     def set_random_params(self, ax):
         """Pick a color, radius, center, and rotation in scene coordinates."""
-        if self.color_list is not None:
-            colors = np.asarray(self.color_list, dtype=float) / 255
-            self.random_color = colors[self.rng.integers(len(colors))]
+        if self._palette is not None:
+            self.random_color = self._palette[self.rng.integers(len(self._palette))]
         else:
             self.random_color = self.rng.random(3)
         self.radius = self.rng.integers(max(1, round(self.shape_size * 0.5)), self.shape_size)

@@ -47,12 +47,15 @@ generate-shapes --output-path output/background --datasize 20 \
 | `--alpha` | `1` | Shape opacity between zero and one |
 | `--shapes` | Triangle Circle Hexagon Square Nonagon Pentagon | One instance of each listed shape per scene |
 | `--seed` | unset | Reproduce scene content within the same dependency environment |
+| `--progress-every` | `100` | Print progress every N images and at completion; `0` disables it |
 
 Supported shapes: Triangle, Circle, Square, Pentagon, Hexagon, Heptagon, Octagon, Nonagon, and Star. Legacy underscore option names such as `--output_path` and `--bg_image` remain accepted. `--use_color_list false` also selects random colors.
 
 The scene spans `[-width, width]` and `[-height, height]`; a radius of 100 scene units occupies about 50 pixels at the output scale. Radii are sampled from approximately half `shape_size` up to, but excluding, `shape_size`. Set `2 <= shape_size <= min(width, height)`; reduce the default when generating small images. Rotation changes orientation; a square may appear as a diamond.
 
 Outputs are named `scene_<uuid>.png`. A seed fixes image content, not filenames. Each file contains the entire scene, and filenames do not identify a single shape class. There are no class labels, masks, or bounding boxes.
+
+Each successful run also saves `run_<uuid>.json` beside the images. It records the seed, selected shapes, palette, dimensions, opacity, background path, starting RNG state, and the image filenames for that run. Repeated runs retain earlier images and metadata. Paths refer to your local files; metadata does not embed a copy of the background or your dependency environment.
 
 ## Use and adapt the Python API
 
@@ -74,6 +77,10 @@ print(paths[0])
 ```
 
 With `color_list=None`, the API uses random RGB colors. To add a polygon, subclass `AbstractPolygonShape`, set `number_of_vertices`, and register it in `SHAPE_TYPES` in `geometric_shapes.py`. For another geometry, implement `AbstractShape.generate()` and `get_shape_coordinates()`. Add annotation export in the generation loop if your task needs supervised labels; the existing PyTorch loader returns a placeholder zero label.
+
+The palette is copied and normalized when the generator is constructed; changing your original palette list afterward does not change a run. The API is silent by default. Use `.generate(progress=lambda completed, total: print(f"{completed}/{total}"))` to receive an update after each image is saved.
+
+For content replay, construct a generator with the recorded settings and the same dependency environment. Restoring `generator.rng.bit_generator.state = settings["rng_state"]` before `.generate()` also reproduces unseeded runs and later runs from a reused generator. A seed alone reproduces the first run of a fresh generator. The background file must have the same contents.
 
 ## Optional PyTorch loader
 

@@ -2,9 +2,11 @@
 
 import contextlib
 import io
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 from PIL import Image
@@ -62,7 +64,7 @@ class GeneratorTests(unittest.TestCase):
                         dict(shape_size=241), dict(alpha=2), dict(color_list=[]),
                         dict(color_list=[[0, 1]]), dict(color_list=[[256, 0, 0]]),
                         dict(color_list=[[float("nan"), 0, 0]]), dict(shapes=[]),
-                        dict(shapes=["NotAShape"])):
+                        dict(shapes=["NotAShape"]), dict(seed=-1), dict(seed=1.5)):
             with self.subTest(options=options), self.assertRaises(ValueError):
                 self.generator(**options)
 
@@ -79,6 +81,94 @@ class GeneratorTests(unittest.TestCase):
                 images.append(np.array(image))
         np.testing.assert_array_equal(images[0], images[1])
         self.assertFalse(np.array_equal(images[0], images[2]))
+
+    def test_run_settings_include_actual_configuration_and_images(self):
+        background = self.root / "background.png"
+        Image.new("RGB", (10, 10), (10, 20, 30)).save(background)
+        generator = self.generator(
+            bg_image=background, alpha=np.float32(0.5), color_list=np.array([[20, 80, 160]]),
+            seed=np.int64(12), shapes=["Circle", "Star"],
+        )
+        paths = generator.generate()
+        metadata = json.loads(next(generator.destination.glob("run_*.json")).read_text())
+        for key, expected in {
+            "schema_version": 1, "size": 2, "dim_x": 320, "dim_y": 240,
+            "shape_size": 70, "alpha": 0.5, "seed": 12,
+            "color_list": [[20, 80, 160]], "shapes": ["Circle", "Star"],
+            "bg_image": str(background.resolve()), "destination": str(generator.destination.resolve()),
+            "images": [path.name for path in paths],
+        }.items():
+            with self.subTest(key=key):
+                self.assertEqual(metadata[key], expected)
+        self.assertEqual(metadata["rng_state"]["bit_generator"], "PCG64")
+
+    def test_repeated_runs_keep_metadata_and_can_replay_unseeded_content(self):
+        generator = self.generator(size=1, seed=None)
+        first = generator.generate()[0]
+        second = generator.generate()[0]
+        manifests = [json.loads(path.read_text()) for path in generator.destination.glob("run_*.json")]
+        self.assertEqual(len(manifests), 2)
+        self.assertEqual({m["images"][0] for m in manifests}, {first.name, second.name})
+        metadata = next(m for m in manifests if m["images"] == [second.name])
+        self.assertIsNone(metadata["seed"])
+        self.assertIsNone(metadata["bg_image"])
+        self.assertIsNone(metadata["color_list"])
+        replay = self.generator(size=1)
+        replay.rng.bit_generator.state = metadata["rng_state"]
+        replayed = replay.generate()[0]
+        with Image.open(second) as a, Image.open(replayed) as b:
+            np.testing.assert_array_equal(np.asarray(a), np.asarray(b))
+
+    def test_progress_callback_runs_after_each_image_is_saved(self):
+        events = []
+        generator = self.generator(size=3)
+
+        def progress(completed, total):
+            events.append((completed, total))
+            self.assertEqual(len(list(generator.destination.glob("*.png"))), completed)
+
+        generator.generate(progress=progress)
+        self.assertEqual(events, [(1, 3), (2, 3), (3, 3)])
+
+    def test_failed_render_does_not_report_progress_or_complete_metadata(self):
+        events = []
+        generator = self.generator()
+        with patch("matplotlib.figure.Figure.savefig", side_effect=OSError("disk full")):
+            with self.assertRaisesRegex(OSError, "disk full"):
+                generator.generate(progress=lambda *event: events.append(event))
+        self.assertEqual(events, [])
+        self.assertEqual(list(generator.destination.glob("run_*.json")), [])
+
+    def test_palette_is_snapshotted_and_renders_original_rgb_values(self):
+        palette = [[20, 80, 160]]
+        generator = self.generator(size=1, shapes=["Circle"], color_list=palette)
+        palette[0][:] = [255, 0, 0]
+        path = generator.generate()[0]
+        with Image.open(path) as image:
+            rgb = np.array(image.convert("RGB"))
+        self.assertTrue(np.any(np.all(rgb == (20, 80, 160), axis=-1)))
+        self.assertFalse(np.any(np.all(rgb == (255, 0, 0), axis=-1)))
+        metadata = json.loads(next(generator.destination.glob("run_*.json")).read_text())
+        self.assertEqual(metadata["color_list"], [[20, 80, 160]])
+
+    def test_cli_progress_interval_and_disable(self):
+        common = ["--datasize", "5", "--resolution-x", "160", "--resolution-y", "120",
+                  "--shape-size", "30", "--seed", "1"]
+        for interval, expected in ((2, ["Progress: 2/5 images", "Progress: 4/5 images", "Progress: 5/5 images"]),
+                                   (0, [])):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                main(common + ["--output-path", str(self.root / str(interval)), "--progress-every", str(interval)])
+            self.assertEqual([line for line in output.getvalue().splitlines() if line.startswith("Progress:")], expected)
+            self.assertIn("Generated 5 images", output.getvalue())
+
+    def test_cli_invalid_progress_interval_creates_no_output(self):
+        output = self.root / "invalid"
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as error:
+                main(["--progress-every", "-1", "--output-path", str(output)])
+        self.assertEqual(error.exception.code, 2)
+        self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":

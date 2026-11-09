@@ -31,7 +31,16 @@ def main(argv=None):
     parser.add_argument("--alpha", type=float, default=1)
     parser.add_argument("--shapes", nargs="+", choices=SHAPE_TYPES, default=DEFAULT_SHAPES)
     parser.add_argument("--seed", type=int, help="Reproduce scene content; filenames remain unique")
+    parser.add_argument("--progress-every", type=int, default=100,
+                        help="Report every N images and at completion; 0 disables progress")
     args = parser.parse_args(argv)
+    if args.progress_every < 0:
+        parser.error("--progress-every must be nonnegative")
+
+    def report_progress(completed, total):
+        if args.progress_every and (completed % args.progress_every == 0 or completed == total):
+            print(f"Progress: {completed}/{total} images", flush=True)
+
     try:
         generator = GeometricShapes(
             destination=args.output_path, size=args.datasize, dim_x=args.resolution_x,
@@ -39,7 +48,7 @@ def main(argv=None):
             color_list=COLOR_LIST if args.use_color_list else None,
             bg_image=args.bg_image, shapes=args.shapes, seed=args.seed,
         )
-        paths = generator.generate()
+        paths = generator.generate(progress=report_progress)
     except (ValueError, OSError) as error:
         parser.error(str(error))
     print(f"Generated {len(paths)} images in {generator.destination.resolve()}")
