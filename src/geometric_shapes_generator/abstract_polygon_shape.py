@@ -1,7 +1,9 @@
+# SPDX-License-Identifier: MIT
+
 from abc import ABC
-from src.abstract_shape import AbstractShape
+from .abstract_shape import AbstractShape
 import numpy as np
-import matplotlib.pyplot as plt
+from matplotlib.patches import Circle as CirclePatch, Polygon
 
 
 class AbstractPolygonShape(AbstractShape, ABC):
@@ -13,7 +15,7 @@ class AbstractPolygonShape(AbstractShape, ABC):
             raise NotImplementedError("The number of vertices must be specified.")
 
         theta = np.linspace(0, 2 * np.pi, self.number_of_vertices, endpoint=False)
-        points = np.stack((self.radius * np.cos(theta), self.radius * np.sin(theta)), axis=-1)
+        points = np.stack((self.radius * np.cos(theta + self.rotation), self.radius * np.sin(theta + self.rotation)), axis=-1)
         points += np.array([self.x, self.y])
         return points
 
@@ -21,7 +23,7 @@ class AbstractPolygonShape(AbstractShape, ABC):
         """ Generate the shape on the provided ax (matplotlib axis) """
         self.set_random_params(ax)
         coordinates = self.get_shape_coordinates()
-        polygon = plt.Polygon(coordinates, closed=True, color=self.random_color, alpha=self.alpha)
+        polygon = Polygon(coordinates, closed=True, color=self.random_color, alpha=self.alpha)
         ax.add_patch(polygon)
 
 
@@ -57,7 +59,7 @@ class Circle(AbstractShape):
     def generate(self, ax):
         """ Generate a circle shape """
         self.set_random_params(ax)
-        circle = plt.Circle((self.x, self.y), self.radius, color=self.random_color, alpha=self.alpha)
+        circle = CirclePatch((self.x, self.y), self.radius, color=self.random_color, alpha=self.alpha)
         ax.add_patch(circle)
 
     def get_shape_coordinates(self):
@@ -69,7 +71,7 @@ class Star(AbstractPolygonShape):
         """ Generate star coordinates based on a 5-point star """
         points = []
         for i in range(10):
-            angle = np.pi / 5 * i
+            angle = np.pi / 5 * i + self.rotation
             radius = self.radius if i % 2 == 0 else self.radius / 2
             x = self.x + radius * np.cos(angle)
             y = self.y + radius * np.sin(angle)

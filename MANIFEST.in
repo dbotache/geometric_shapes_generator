@@ -1,0 +1,4 @@
+recursive-include docs *.md
+recursive-include assets *.png *.md
+recursive-include notebooks *.ipynb
+include run_generator.py
